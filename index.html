@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlateGuessr - Zgadnij tablicę rejestracyjną!</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        body { display: flex; flex-direction: column; height: 100vh; background-color: #0f172a; color: #f8fafc; overflow: hidden; position: relative; }
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 24px; }
+        .start-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; padding: 48px 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-width: 480px; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        #start-screen h1 { font-size: 2.75rem; font-weight: 800; color: #f97316; text-shadow: 0 0 15px rgba(249, 115, 22, 0.6), 0 0 30px rgba(249, 115, 22, 0.3); margin-bottom: 12px; letter-spacing: -0.025em; }
+        #start-screen p { font-size: 1.05rem; color: #94a3b8; margin-bottom: 32px; line-height: 1.5; }
+        #difficulty-selection { display: none; width: 100%; flex-direction: column; gap: 14px; }
+        .btn-mode { background-color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.1); color: #f8fafc; padding: 16px; border-radius: 14px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .btn-mode:hover { border-color: #f97316; background-color: rgba(249, 115, 22, 0.05); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2); }
+        .btn-mode span { font-size: 0.8rem; color: #94a3b8; font-weight: 400; }
+        #game-header { flex: 0 0 125px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #111827; position: relative; border-bottom: 1px solid rgba(255, 255, 255, 0.06); z-index: 2; padding: 8px 16px; }
+        .header-info { position: absolute; top: 14px; left: 20px; font-size: 0.9rem; font-weight: 500; color: #94a3b8; display: flex; flex-direction: column; gap: 2px; background: rgba(255, 255, 255, 0.03); padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        .header-info span, .score-info span, .timer-info { color: #f97316; font-weight: 700; text-shadow: 0 0 8px rgba(249, 115, 22, 0.5); }
+        .score-info { position: absolute; top: 14px; right: 20px; font-size: 0.9rem; font-weight: 500; color: #94a3b8; background: rgba(255, 255, 255, 0.03); padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        .game-brand { font-size: 1.35rem; font-weight: 800; color: #f97316; text-shadow: 0 0 12px rgba(249, 115, 22, 0.7), 0 0 25px rgba(249, 115, 22, 0.3); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
+        .license-plate { background-color: #ffffff; border: 3px solid #1e293b; border-radius: 8px; display: flex; align-items: center; padding: 3px; box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.4); min-width: 240px; height: 52px; position: relative; }
+        .euroband { background-color: #1d4ed8; width: 26px; height: 100%; border-radius: 5px 0 0 5px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3px 0; color: white; font-size: 8px; font-weight: bold; }
+        .stars { color: #fbbf24; font-size: 6px; text-align: center; line-height: 6px; }
+        .plate-text { flex: 1; color: #0f172a; font-size: 1.8rem; font-weight: 800; text-align: center; letter-spacing: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; }
+        #map-container { flex: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+        #controls { position: absolute; bottom: 24px; right: 24px; z-index: 1000; }
+        .btn { background-color: #f97316; color: white; border: none; padding: 14px 28px; font-size: 1rem; font-weight: 600; border-radius: 14px; cursor: pointer; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4), 0 0 10px rgba(249, 115, 22, 0.3); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .btn:hover { background-color: #f97316; filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(249, 115, 22, 0.6), 0 0 15px rgba(249, 115, 22, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { background-color: #334155; color: #64748b; cursor: not-allowed; transform: none; box-shadow: none; filter: none; }
+        .btn-secondary { background-color: #475569; box-shadow: none; }
+        .btn-secondary:hover { background-color: #64748b; box-shadow: none; }
+        .btn-large { padding: 16px 36px; font-size: 1.1rem; width: 100%; border-radius: 12px; }
+        #footer-copyright { position: absolute; bottom: 12px; left: 16px; z-index: 1000; font-size: 0.75rem; color: rgba(255, 255, 255, 0.3); pointer-events: none; }
+        #audio-toggle, #dark-toggle {
+            position: absolute;
+            top: 14px;
+            z-index: 1000;
+            font-size: 0.9rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3b8;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #audio-toggle { left: 260px; }
+        #dark-toggle { left: 310px; }
+        #audio-toggle:hover, #dark-toggle:hover { border-color: #f97316; color: #f97316; }
+        
+        
+        #feedback-panel {
+            position: absolute;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+        }
+        #feedback-toggle {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #1e293b;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-right: none;
+            color: #f97316;
+            padding: 10px 8px;
+            border-radius: 10px 0 0 10px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            box-shadow: -4px 0 15px rgba(0,0,0,0.3);
+            transition: all 0.25s;
+            z-index: 2;
+        }
+        #feedback-toggle:hover { background: #f97316; color: white; }
+        #feedback-content {
+            background: #1e293b;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-right: none;
+            padding: 18px 20px;
+            padding-right: 48px;
+            border-radius: 12px 0 0 12px;
+            width: 230px;
+            transform: translateX(100%);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #feedback-panel.open #feedback-content {
+            transform: translateX(0);
+            opacity: 1;
+            pointer-events: all;
+        }
+        #feedback-panel.open #feedback-toggle {
+            background: #0f172a;
+            right: 210px;
+        }
+        #feedback-content h4 { color: #f8fafc; font-size: 0.9rem; margin-bottom: 8px; }
+        #feedback-content p { color: #94a3b8; font-size: 0.85rem; }
+        #feedback-content b { color: #f97316; }
+
+
+        #version-tag { position: absolute; top: 14px; left: 140px; z-index: 1000; font-size: 0.75rem; font-weight: 600; color: #f97316; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.2); padding: 4px 10px; border-radius: 6px; letter-spacing: 0.05em; pointer-events: none; }
+        #result-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e293b; border: 1px solid rgba(255, 255, 255, 0.08); padding: 32px; border-radius: 24px; text-align: center; z-index: 2000; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); width: 440px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+        #result-modal h2 { margin-bottom: 16px; color: #f8fafc; font-size: 1.5rem; font-weight: 700; }
+        #result-modal p { margin: 10px 0; font-size: 1rem; color: #94a3b8; }
+        #result-points { font-size: 1.75rem !important; font-weight: 800 !important; color: #f97316 !important; text-shadow: 0 0 12px rgba(249, 115, 22, 0.6); margin: 12px 0 20px 0 !important; }
+        #save-score-section { display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+        #player-name-input { padding: 12px 16px; border-radius: 12px; border: 1px solid #475569; background-color: #0f172a; color: #fff; font-size: 1rem; width: 100%; margin-bottom: 12px; text-align: center; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+        #player-name-input:focus { border-color: #f97316; box-shadow: 0 0 10px rgba(249, 115, 22, 0.4); }
+        .leaderboard-container { display: none; margin-top: 20px; text-align: left; background: #0f172a; border-radius: 14px; padding: 16px; border: 1px solid rgba(255, 255, 255, 0.05); max-height: 180px; overflow-y: auto; }
+        .leaderboard-container h3 { color: #f97316; text-shadow: 0 0 8px rgba(249, 115, 22, 0.5); text-align: center; margin-bottom: 12px; font-size: 1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .leaderboard-list { list-style: none; padding: 0; margin: 0; }
+        .leaderboard-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); font-size: 0.9rem; }
+        .leaderboard-item:last-child { border-bottom: none; }
+        .leaderboard-item .rank-name { font-weight: 500; color: #cbd5e1; }
+        .leaderboard-item .score-val { color: #f97316; font-weight: 600; text-shadow: 0 0 6px rgba(249, 115, 22, 0.4); }
+        #next-btn { width: 100%; margin-top: 20px; background-color: #f97316; }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <div class="start-card">
+            <h1>PlateGuessr</h1>
+            <p id="start-desc">Zgadnij skąd pochodzi polska tablica rejestracyjna i sprawdź swoją wiedzę geograficzną!</p>
+            <div id="main-menu-actions" style="width: 100%;">
+                <button class="btn btn-large" onclick="showDifficultyMenu()">Graj</button>
+            </div>
+            <div id="difficulty-selection">
+                <button class="btn-mode" onclick="startGame('easy')">Tryb Łatwy<span>Większe miast i stolice województw</span></button>
+                <button class="btn-mode" onclick="startGame('hard')">Tryb Trudny<span>Mniejsze powiaty i miasta ziemskie</span></button>
+                <button class="btn-secondary" style="padding: 10px; border-radius: 10px; border: none; cursor: pointer; color: #94a3b8; background: transparent;" onclick="hideDifficultyMenu()">Wróć</button>
+            </div>
+        </div>
+    </div>
+    <div id="game-header">
+        <div id="version-tag">BETA 0.1.2</div>
+        <button id="audio-toggle" onclick="toggleAudio()">🔊</button>
+        <button id="dark-toggle" onclick="toggleDarkMode()">🌙</button>
+        <select id="dark-style" onchange="changeDarkStyle(this.value)" style="position:absolute; top:14px; left:360px; z-index:1000; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#94a3b8; padding:4px 8px; border-radius:6px; font-size:0.8rem; display:none;"><option value="esri">Esri Dark</option><option value="osm">OSM Dark (filtr)</option><option value="carto2">Carto Dark</option></select>
+        <div class="header-info">
+            <div>Runda: <span id="round-num">1</span>/5</div>
+            <div class="timer-info">Czas: <span id="timer">0.0</span>s</div>
+        </div>
+        <div class="score-info">Wynik: <span id="total-score">0</span> pkt</div>
+        <div class="game-brand">PlateGuessr</div>
+        <div class="license-plate">
+            <div class="euroband"><div class="stars">★<br>★</div><div>PL</div></div>
+            <div class="plate-text" id="plate-code">---</div>
+        </div>
+    </div>
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="controls"><button id="guess-btn" class="btn" disabled onclick="makeGuess()">Zatwierdź strzał</button></div>
+        <div id="footer-copyright">Toksi44 ©Copyright</div>
+
+    <div id="feedback-panel">
+        <button id="feedback-toggle" onclick="toggleFeedback()">🐛</button>
+        <div id="feedback-content">
+            <h4>Znalazłeś jakiś błąd?</h4>
+            <p>Napisz na dc: <b>Toksi44</b></p>
+            <p style="margin-top:12px; font-size:0.8rem; color:#64748b;">THX</p>
+        </div>
+    </div>
+
+    </div>
+    <div id="result-modal">
+        <h2 id="result-title">Wynik rundy</h2>
+        <p id="result-location"></p>
+        <p id="result-distance"></p>
+        <p id="result-points"></p>
+        <div id="save-score-section">
+            <p style="font-size: 0.9rem; margin-bottom: 10px;">Wpisz swój nick, aby zapisać wynik:</p>
+            <input type="text" id="player-name-input" placeholder="Twój nick" maxlength="15">
+            <button class="btn btn-secondary" style="width:100%; margin-top:8px;" onclick="saveScore()">Zapisz wynik</button>
+        </div>
+        <div id="leaderboard-easy" class="leaderboard-container"><h3>Tabela Wyników (Tryb Łatwy)</h3><ol id="leaderboard-list-easy" class="leaderboard-list"></ol></div>
+        <div id="leaderboard-hard" class="leaderboard-container"><h3>Tabela Wyników (Tryb Trudny)</h3><ol id="leaderboard-list-hard" class="leaderboard-list"></ol></div>
+        <button id="next-btn" class="btn" onclick="handleModalAction()">Następna runda</button>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const easyPlatesData = [
+            { code: "BI", name: "Białystok", lat: 53.1325, lng: 23.1688 },
+            { code: "SB", name: "Bielsko-Biała", lat: 49.8224, lng: 19.0469 },
+            { code: "CB", name: "Bydgoszcz", lat: 53.1235, lng: 18.0084 },
+            { code: "SY", name: "Bytom", lat: 50.3478, lng: 18.9177 },
+            { code: "LC", name: "Chełm", lat: 51.143, lng: 23.4719 },
+            { code: "SH", name: "Chorzów", lat: 50.2975, lng: 18.9556 },
+            { code: "SC", name: "Częstochowa", lat: 50.8118, lng: 19.1203 },
+            { code: "SD", name: "Dąbrowa Górnicza", lat: 50.3213, lng: 19.1819 },
+            { code: "NE", name: "Elbląg", lat: 54.1561, lng: 19.4045 },
+            { code: "GD", name: "Gdańsk", lat: 54.352, lng: 18.6466 },
+            { code: "GA", name: "Gdynia", lat: 54.5189, lng: 18.5305 },
+            { code: "SG", name: "Gliwice", lat: 50.2945, lng: 18.6714 },
+            { code: "FG", name: "Gorzów Wielkopolski", lat: 52.7368, lng: 15.2288 },
+            { code: "CG", name: "Grudziądz", lat: 53.4839, lng: 18.7525 },
+            { code: "SJZ", name: "Jastrzębie-Zdrój", lat: 49.9519, lng: 18.5783 },
+            { code: "SJ", name: "Jaworzno", lat: 50.2056, lng: 19.2742 },
+            { code: "DJ", name: "Jelenia Góra", lat: 50.9039, lng: 15.7236 },
+            { code: "PK", name: "Kalisz", lat: 51.7611, lng: 18.0911 },
+            { code: "SK", name: "Katowice", lat: 50.2649, lng: 19.0238 },
+            { code: "TK", name: "Kielce", lat: 50.8661, lng: 20.6286 },
+            { code: "PN", name: "Konin", lat: 52.2233, lng: 18.2511 },
+            { code: "ZK", name: "Koszalin", lat: 54.1944, lng: 16.1722 },
+            { code: "KR", name: "Kraków", lat: 50.0647, lng: 19.945 },
+            { code: "RK", name: "Krosno", lat: 49.6931, lng: 21.7653 },
+            { code: "DL", name: "Legnica", lat: 51.2072, lng: 16.1553 },
+            { code: "PL", name: "Leszno", lat: 51.8403, lng: 16.5747 },
+            { code: "LU", name: "Lublin", lat: 51.2465, lng: 22.5684 },
+            { code: "BL", name: "Łomża", lat: 53.1781, lng: 22.059 },
+            { code: "LD", name: "Łódź", lat: 51.7592, lng: 19.456 },
+            { code: "SM", name: "Mysłowice", lat: 50.2141, lng: 19.1372 },
+            { code: "KN", name: "Nowy Sącz", lat: 49.6217, lng: 20.6972 },
+            { code: "NO", name: "Olsztyn", lat: 53.7784, lng: 20.4801 },
+            { code: "OP", name: "Opole", lat: 50.6721, lng: 17.9253 },
+            { code: "WO", name: "Ostrołęka", lat: 53.0726, lng: 21.5757 },
+            { code: "SPI", name: "Piekary Śląskie", lat: 50.3836, lng: 18.941 },
+            { code: "WP", name: "Płock", lat: 52.5463, lng: 19.7065 },
+            { code: "PO", name: "Poznań", lat: 52.4064, lng: 16.9252 },
+            { code: "RP", name: "Przemyśl", lat: 49.7839, lng: 22.7676 },
+            { code: "WR", name: "Radom", lat: 51.4027, lng: 21.1471 },
+            { code: "SL", name: "Ruda Śląska", lat: 50.2647, lng: 18.8542 },
+            { code: "SR", name: "Rybnik", lat: 50.0971, lng: 18.5418 },
+            { code: "RZ", name: "Rzeszów", lat: 50.0412, lng: 21.9991 },
+            { code: "WS", name: "Siedlce", lat: 52.1667, lng: 22.2833 },
+            { code: "SI", name: "Siemianowice Śląskie", lat: 50.3042, lng: 19.0218 },
+            { code: "ES", name: "Skierniewice", lat: 51.9547, lng: 20.145 },
+            { code: "GS", name: "Słupsk", lat: 54.464, lng: 17.0285 },
+            { code: "GSP", name: "Sopot", lat: 54.4416, lng: 18.5601 },
+            { code: "SO", name: "Sosnowiec", lat: 50.2865, lng: 19.104 },
+            { code: "BS", name: "Suwałki", lat: 54.1119, lng: 22.9309 },
+            { code: "ZS", name: "Szczecin", lat: 53.4285, lng: 14.5528 },
+            { code: "SW", name: "Świętochłowice", lat: 50.2865, lng: 18.9222 },
+            { code: "ZSW", name: "Świnoujście", lat: 53.9106, lng: 14.246 },
+            { code: "RT", name: "Tarnobrzeg", lat: 50.5736, lng: 21.6772 },
+            { code: "KT", name: "Tarnów", lat: 50.0121, lng: 20.9858 },
+            { code: "CT", name: "Toruń", lat: 53.0138, lng: 18.5984 },
+            { code: "ST", name: "Tychy", lat: 50.0122, lng: 18.9897 },
+            { code: "DB", name: "Wałbrzych", lat: 50.7714, lng: 16.2843 },
+            { code: "WA", name: "Warszawa", lat: 52.2297, lng: 21.0122 },
+            { code: "CW", name: "Włocławek", lat: 52.645, lng: 19.0658 },
+            { code: "DW", name: "Wrocław", lat: 51.11, lng: 17.0333 },
+            { code: "SZ", name: "Zabrze", lat: 50.3265, lng: 18.7857 },
+            { code: "LZ", name: "Zamość", lat: 50.7233, lng: 23.2517 },
+            { code: "FZ", name: "Zielona Góra", lat: 51.9356, lng: 15.5064 },
+            { code: "SZO", name: "Żory", lat: 50.045, lng: 18.7 },
+            { code: "LB", name: "Biała Podlaska", lat: 52.0386, lng: 23.1228 }
+        ];
+
+        const hardPlatesData = [
+            { code: "BAU", name: "Augustów (Powiat augustowski)", lat: 53.8435, lng: 22.9748 },
+            { code: "BBI", name: "Bielsk Podlaski (Powiat bielski)", lat: 52.96, lng: 23.58 },
+            { code: "BGR", name: "Grajewo (Powiat grajewski)", lat: 53.17, lng: 23.44 },
+            { code: "BHA", name: "Hajnówka (Powiat hajnowski)", lat: 52.7442, lng: 23.5786 },
+            { code: "BIA", name: "Białystok (Powiat białostocki)", lat: 53.1325, lng: 23.1688 },
+            { code: "BKL", name: "Kolno (Powiat kolneński)", lat: 52.89, lng: 23.44 },
+            { code: "BLM", name: "Łomża (Powiat łomżyński)", lat: 52.92, lng: 23.27 },
+            { code: "BMN", name: "Mońki (Powiat moniecki)", lat: 53.01, lng: 23.44 },
+            { code: "BSE", name: "Sejny (Powiat sejneński)", lat: 54.1025, lng: 23.3483 },
+            { code: "BSI", name: "Siemiatycze (Powiat siemiatycki)", lat: 53.4, lng: 22.96 },
+            { code: "BSK", name: "Sokółka (Powiat sokólski)", lat: 53.4094, lng: 23.5019 },
+            { code: "BSU", name: "Suwałki (Powiat suwalski)", lat: 52.85, lng: 23.21 },
+            { code: "BWM", name: "Wysokie Mazowieckie (Powiat wysokomazowiecki)", lat: 52.93, lng: 23.15 },
+            { code: "BZA", name: "Zambrów (Powiat zambrowski)", lat: 52.9844, lng: 22.2417 },
+            { code: "CAL", name: "Aleksandrów Kujawski (Powiat aleksandrowski)", lat: 52.9411, lng: 18.6925 },
+            { code: "CBR", name: "Brodnica (Powiat brodnicki)", lat: 53.2583, lng: 19.4044 },
+            { code: "CBY", name: "Bydgoszcz (Powiat bydgoski)", lat: 52.65, lng: 18.39 },
+            { code: "CCH", name: "Chełmno (Powiat chełmiński)", lat: 53.3491, lng: 18.4264 },
+            { code: "CGD", name: "Golub-Dobrzyń (Powiat golubsko-dobrzyński)", lat: 52.85, lng: 18.44 },
+            { code: "CGR", name: "Grudziądz (Powiat grudziądzki)", lat: 53.21, lng: 18.78 },
+            { code: "CIN", name: "Inowrocław (Powiat inowrocławski)", lat: 52.7958, lng: 18.2592 },
+            { code: "CLI", name: "Lipno (Powiat lipnowski)", lat: 52.8461, lng: 19.2856 },
+            { code: "CMG", name: "Mogilno (Powiat mogileński)", lat: 53.14, lng: 19.0 },
+            { code: "CNA", name: "Nakło nad Notecią (Powiat nakielski)", lat: 52.71, lng: 18.83 },
+            { code: "CRA", name: "Radziejów (Powiat radziejowski)", lat: 53.02, lng: 19.07 },
+            { code: "CRY", name: "Rypin (Powiat rypiński)", lat: 53.42, lng: 18.32 },
+            { code: "CSE", name: "Sępólno Krajeńskie (Powiat sępoleński)", lat: 53.43, lng: 19.08 },
+            { code: "CSW", name: "Świecie (Powiat świecki)", lat: 52.9, lng: 18.6 },
+            { code: "CTR", name: "Toruń (Powiat toruński)", lat: 52.59, lng: 18.48 },
+            { code: "CTU", name: "Tuchola (Powiat tucholski)", lat: 53.15, lng: 18.73 },
+            { code: "CWA", name: "Wąbrzeźno (Powiat wąbrzeski)", lat: 53.0997, lng: 18.8992 },
+            { code: "CWL", name: "Włocławek (Powiat włocławski)", lat: 52.64, lng: 18.56 },
+            { code: "CZN", name: "Żnin (Powiat żniński)", lat: 52.99, lng: 18.92 },
+            { code: "DBA", name: "Wałbrzych (Powiat wałbrzyski)", lat: 50.7714, lng: 16.2843 },
+            { code: "DBL", name: "Bolesławiec (Powiat bolesławiecki)", lat: 51.1467, lng: 15.9319 },
+            { code: "DDZ", name: "Dzierżoniów (Powiat dzierżoniowski)", lat: 50.7247, lng: 16.6511 },
+            { code: "DGL", name: "Głogów (Powiat głogowski)", lat: 51.6644, lng: 16.0864 },
+            { code: "DGR", name: "Góra (Powiat górowski)", lat: 51.6653, lng: 16.5438 },
+            { code: "DJA", name: "Jawor (Powiat jaworski)", lat: 50.9686, lng: 16.2025 },
+            { code: "DJE", name: "Jelenia Góra (Powiat karkonoski)", lat: 50.85, lng: 17.23 },
+            { code: "DKA", name: "Kamienna Góra (Powiat kamiennogórski)", lat: 50.7806, lng: 16.0258 },
+            { code: "DKL", name: "Kłodzko (Powiat kłodzki)", lat: 50.4422, lng: 16.6544 },
+            { code: "DLB", name: "Lubań (Powiat lubański)", lat: 50.8992, lng: 15.2925 },
+            { code: "DLE", name: "Legnica (Powiat legnicki)", lat: 51.2072, lng: 16.1553 },
+            { code: "DLU", name: "Lubin (Powiat lubiński)", lat: 51.3947, lng: 16.2025 },
+            { code: "DLW", name: "Lwówek Śląski (Powiat lwówecki)", lat: 50.8608, lng: 16.4506 },
+            { code: "DMI", name: "Milicz (Powiat milicki)", lat: 51.5269, lng: 17.1586 },
+            { code: "DOA", name: "Oława (Powiat oławski)", lat: 50.9467, lng: 17.2953 },
+            { code: "DOL", name: "Oleśnica (Powiat oleśnicki)", lat: 50.9483, lng: 17.3611 },
+            { code: "DPL", name: "Polkowice (Powiat polkowicki)", lat: 51.7972, lng: 16.1247 },
+            { code: "DSR", name: "Środa Śląska (Powiat średzki)", lat: 50.8628, lng: 16.7486 },
+            { code: "DST", name: "Strzelin (Powiat strzeliński)", lat: 50.7808, lng: 17.0717 },
+            { code: "DSW", name: "Świdnica (Powiat świdnicki)", lat: 50.8431, lng: 16.4817 },
+            { code: "DTR", name: "Trzebnica (Powiat trzebnicki)", lat: 50.9569, lng: 17.0486 },
+            { code: "DWL", name: "Wołów (Powiat wołowski)", lat: 51.3411, lng: 16.6408 },
+            { code: "DWR", name: "Wrocław (Powiat wrocławski)", lat: 51.11, lng: 17.03 },
+            { code: "DZA", name: "Ząbkowice Śląskie (Powiat ząbkowicki)", lat: 50.5886, lng: 16.8125 },
+            { code: "DZG", name: "Zgorzelec (Powiat zgorzelecki)", lat: 51.1497, lng: 15.0092 },
+            { code: "DZL", name: "Złotoryja (Powiat złotoryjski)", lat: 51.1306, lng: 15.9181 },
+            { code: "EBE", name: "Bełchatów (Powiat bełchatowski)", lat: 51.91, lng: 19.84 },
+            { code: "EBR", name: "Brzeziny (Powiat brzeziński)", lat: 52.23, lng: 19.93 },
+            { code: "EKU", name: "Kutno (Powiat kutnowski)", lat: 52.22, lng: 19.58 },
+            { code: "ELA", name: "Łask (Powiat łaski)", lat: 51.35, lng: 19.16 },
+            { code: "ELC", name: "Łowicz (Powiat łowicki)", lat: 51.99, lng: 19.37 },
+            { code: "ELE", name: "Łęczyca (Powiat łęczycki)", lat: 51.5908, lng: 19.1306 },
+            { code: "ELW", name: "Łódź (Powiat łódzki wschodni)", lat: 51.7592, lng: 19.456 },
+            { code: "EOP", name: "Opoczno (Powiat opoczyński)", lat: 51.93, lng: 19.2 },
+            { code: "EPA", name: "Pabianice (Powiat pabianicki)", lat: 51.6617, lng: 19.3517 },
+            { code: "EPD", name: "Poddębice (Powiat poddębicki)", lat: 51.92, lng: 19.88 },
+            { code: "EPI", name: "Piotrków Trybunalski (Powiat piotrkowski)", lat: 51.43, lng: 19.7 },
+            { code: "EPJ", name: "Pajęczno (Powiat pajęczański)", lat: 51.56, lng: 19.09 },
+            { code: "ERA", name: "Radomsko (Powiat radomszczański)", lat: 51.25, lng: 19.84 },
+            { code: "ERW", name: "Rawa Mazowiecka (Powiat rawski)", lat: 51.92, lng: 19.0 },
+            { code: "ESI", name: "Sieradz (Powiat sieradzki)", lat: 51.92, lng: 19.49 },
+            { code: "ESK", name: "Skierniewice (Powiat skierniewicki)", lat: 51.72, lng: 19.8 },
+            { code: "ETM", name: "Tomaszów Mazowiecki (Powiat tomaszowski)", lat: 51.41, lng: 19.25 },
+            { code: "EWE", name: "Wieruszów (Powiat wieruszowski)", lat: 52.14, lng: 19.36 },
+            { code: "EWI", name: "Wieluń (Powiat wieluński)", lat: 52.01, lng: 19.47 },
+            { code: "EZD", name: "Zduńska Wola (Powiat zduńskowolski)", lat: 52.09, lng: 19.22 },
+            { code: "EZG", name: "Zgierz (Powiat zgierski)", lat: 52.19, lng: 19.26 },
+            { code: "FGW", name: "Gorzów Wielkopolski (Powiat gorzowski)", lat: 52.7368, lng: 15.2288 },
+            { code: "FKR", name: "Krosno Odrzańskie (Powiat krośnieński)", lat: 52.0519, lng: 15.0933 },
+            { code: "FMI", name: "Międzyrzecz (Powiat międzyrzecki)", lat: 52.4439, lng: 15.5789 },
+            { code: "FNW", name: "Nowa Sól (Powiat nowosolski)", lat: 52.55, lng: 14.93 },
+            { code: "FSD", name: "Strzelce Krajeńskie (Powiat strzelecko-drezdenecki)", lat: 53.05, lng: 14.99 },
+            { code: "FSL", name: "Słubice (Powiat słubicki)", lat: 52.3508, lng: 14.5606 },
+            { code: "FSU", name: "Sulęcin (Powiat sulęciński)", lat: 52.7, lng: 14.91 },
+            { code: "FSW", name: "Świebodzin (Powiat świebodziński)", lat: 52.96, lng: 15.09 },
+            { code: "FWS", name: "Wschowa (Powiat wschowski)", lat: 52.8, lng: 14.77 },
+            { code: "FZA", name: "Żary (Powiat żarski)", lat: 51.6344, lng: 15.1353 },
+            { code: "FZG", name: "Żagań (Powiat żagański)", lat: 51.6186, lng: 15.3225 },
+            { code: "FZI", name: "Zielona Góra (Powiat zielonogórski)", lat: 53.17, lng: 15.41 },
+            { code: "GBY", name: "Bytów (Powiat bytowski)", lat: 54.56, lng: 18.92 },
+            { code: "GCH", name: "Chojnice (Powiat chojnicki)", lat: 54.19, lng: 19.08 },
+            { code: "GCZ", name: "Człuchów (Powiat człuchowski)", lat: 54.8, lng: 18.59 },
+            { code: "GDA", name: "Pruszcz Gdański (Powiat gdański)", lat: 54.352, lng: 18.6466 },
+            { code: "GKA", name: "Kartuzy (Powiat kartuski)", lat: 54.42, lng: 18.16 },
+            { code: "GKS", name: "Kościerzyna (Powiat kościerski)", lat: 54.12, lng: 18.59 },
+            { code: "GKW", name: "Kwidzyn (Powiat kwidzyński)", lat: 53.94, lng: 18.19 },
+            { code: "GLE", name: "Lębork (Powiat lęborski)", lat: 54.09, lng: 18.16 },
+            { code: "GMB", name: "Malbork (Powiat malborski)", lat: 54.34, lng: 18.79 },
+            { code: "GND", name: "Nowy Dwór Gdański (Powiat nowodworski)", lat: 54.19, lng: 19.11 },
+            { code: "GPU", name: "Puck (Powiat pucki)", lat: 54.1, lng: 18.2 },
+            { code: "GSL", name: "Słupsk (Powiat słupski)", lat: 54.464, lng: 17.0285 },
+            { code: "GST", name: "Starogard Gdański (Powiat starogardzki)", lat: 54.21, lng: 18.66 },
+            { code: "GSZ", name: "Sztum (Powiat sztumski)", lat: 54.68, lng: 18.44 },
+            { code: "GTC", name: "Tczew (Powiat tczewski)", lat: 54.0933, lng: 18.7828 },
+            { code: "GWE", name: "Wejherowo (Powiat wejherowski)", lat: 54.6056, lng: 18.2444 },
+            { code: "KBC", name: "Bochnia (Powiat bocheński)", lat: 49.9689, lng: 20.4258 },
+            { code: "KBR", name: "Brzesko (Powiat brzeski)", lat: 50.21, lng: 19.65 },
+            { code: "KCH", name: "Chrzanów (Powiat chrzanowski)", lat: 49.56, lng: 20.23 },
+            { code: "KDA", name: "Dąbrowa Tarnowska (Powiat dąbrowski)", lat: 50.22, lng: 19.59 },
+            { code: "KGR", name: "Gorlice (Powiat gorlicki)", lat: 49.6, lng: 19.5 },
+            { code: "KLI", name: "Limanowa (Powiat limanowski)", lat: 50.0, lng: 19.5 },
+            { code: "KMI", name: "Miechów (Powiat miechowski)", lat: 50.22, lng: 19.72 },
+            { code: "KMY", name: "Myślenice (Powiat myślenicki)", lat: 49.8339, lng: 19.9375 },
+            { code: "KNS", name: "Nowy Sącz (Powiat nowosądecki)", lat: 50.35, lng: 20.21 },
+            { code: "KNT", name: "Nowy Targ (Powiat nowotarski)", lat: 50.15, lng: 20.38 },
+            { code: "KOL", name: "Olkusz (Powiat olkuski)", lat: 50.2928, lng: 19.5649 },
+            { code: "KOS", name: "Oświęcim (Powiat oświęcimski)", lat: 50.08, lng: 19.79 },
+            { code: "KPR", name: "Proszowice (Powiat proszowicki)", lat: 50.49, lng: 20.17 },
+            { code: "KRA", name: "Kraków (Powiat krakowski)", lat: 50.0647, lng: 19.945 },
+            { code: "KSU", name: "Sucha Beskidzka (Powiat suski)", lat: 50.04, lng: 19.49 },
+            { code: "KTA", name: "Tarnów (Powiat tarnowski)", lat: 49.61, lng: 19.55 },
+            { code: "KTT", name: "Zakopane (Powiat tatrzański)", lat: 49.96, lng: 19.75 },
+            { code: "KWA", name: "Wadowice (Powiat wadowicki)", lat: 49.64, lng: 20.27 },
+            { code: "KWI", name: "Wieliczka (Powiat wielicki)", lat: 50.18, lng: 20.28 },
+            { code: "LBI", name: "Biała Podlaska (Powiat bialski)", lat: 52.0386, lng: 23.1228 },
+            { code: "LBL", name: "Biłgoraj (Powiat biłgorajski)", lat: 50.5544, lng: 22.7225 },
+            { code: "LCH", name: "Chełm (Powiat chełmski)", lat: 51.143, lng: 23.4719 },
+            { code: "LHR", name: "Hrubieszów (Powiat hrubieszowski)", lat: 50.8058, lng: 23.7658 },
+            { code: "LJA", name: "Janów Lubelski (Powiat janowski)", lat: 50.97, lng: 22.81 },
+            { code: "LKR", name: "Kraśnik (Powiat kraśnicki)", lat: 50.77, lng: 22.43 },
+            { code: "LKS", name: "Krasnystaw (Powiat krasnostawski)", lat: 51.06, lng: 22.96 },
+            { code: "LLB", name: "Lubartów (Powiat lubartowski)", lat: 51.4608, lng: 22.6072 },
+            { code: "LLE", name: "Łęczna (Powiat łęczyński)", lat: 51.3019, lng: 22.9281 },
+            { code: "LLU", name: "Łuków (Powiat łukowski)", lat: 51.9333, lng: 22.3833 },
+            { code: "LOP", name: "Opole Lubelskie (Powiat opolski)", lat: 51.19, lng: 22.34 },
+            { code: "LPA", name: "Parczew (Powiat parczewski)", lat: 51.32, lng: 22.76 },
+            { code: "LPU", name: "Puławy (Powiat puławski)", lat: 51.4142, lng: 21.9694 },
+            { code: "LRA", name: "Radzyń Podlaski (Powiat radzyński)", lat: 51.71, lng: 22.45 },
+            { code: "LRY", name: "Ryki (Powiat rycki)", lat: 51.6289, lng: 21.9233 },
+            { code: "LSW", name: "Świdnik (Powiat świdnicki)", lat: 51.49, lng: 22.81 },
+            { code: "LTM", name: "Tomaszów Lubelski (Powiat tomaszowski)", lat: 50.4464, lng: 23.4142 },
+            { code: "LUB", name: "Lublin (Powiat lubelski)", lat: 51.2465, lng: 22.5684 },
+            { code: "LWL", name: "Włodawa (Powiat włodawski)", lat: 51.56, lng: 22.44 },
+            { code: "LZA", name: "Zamość (Powiat zamojski)", lat: 51.24, lng: 22.19 },
+            { code: "NBA", name: "Bartoszyce (Powiat bartoszycki)", lat: 53.4897, lng: 19.7544 },
+            { code: "NBR", name: "Braniewo (Powiat braniewski)", lat: 54.3817, lng: 19.8675 },
+            { code: "NDZ", name: "Działdowo (Powiat działdowski)", lat: 53.27, lng: 20.69 },
+            { code: "NEB", name: "Elbląg (Powiat elbląski)", lat: 53.98, lng: 20.9 },
+            { code: "NEL", name: "Ełk (Powiat ełcki)", lat: 53.8239, lng: 22.3789 },
+            { code: "NGI", name: "Giżycko (Powiat giżycki)", lat: 54.0353, lng: 21.7656 },
+            { code: "NGO", name: "Gołdap (Powiat gołdapski)", lat: 54.3125, lng: 22.3023 },
+            { code: "NIL", name: "Iława (Powiat iławski)", lat: 53.5, lng: 20.51 },
+            { code: "NKE", name: "Kętrzyn (Powiat kętrzyński)", lat: 53.99, lng: 20.26 },
+            { code: "NLI", name: "Lidzbark Warmiński (Powiat lidzbarski)", lat: 53.37, lng: 20.06 },
+            { code: "NMR", name: "Mrągowo (Powiat mrągowski)", lat: 54.01, lng: 20.8 },
+            { code: "NNM", name: "Nowe Miasto Lubawskie (Powiat nowomiejski)", lat: 54.02, lng: 20.76 },
+            { code: "NOE", name: "Olecko (Powiat olecki)", lat: 54.0284, lng: 22.505 },
+            { code: "NOL", name: "Olsztyn (Powiat olsztyński)", lat: 54.06, lng: 20.7 },
+            { code: "NOS", name: "Ostróda (Powiat ostródzki)", lat: 53.34, lng: 20.7 },
+            { code: "NPI", name: "Pisz (Powiat piski)", lat: 53.66, lng: 20.19 },
+            { code: "NSZ", name: "Szczytno (Powiat szczycieński)", lat: 53.58, lng: 20.0 },
+            { code: "NWE", name: "Węgorzewo (Powiat węgorzewski)", lat: 53.6, lng: 20.4 },
+            { code: "OB", name: "Brzeg (Powiat brzeski)", lat: 50.8667, lng: 17.4725 },
+            { code: "OGL", name: "Głubczyce (Powiat głubczycki)", lat: 50.1964, lng: 17.8344 },
+            { code: "OK", name: "Kędzierzyn-Koźle (Powiat kędzierzyńsko-kozielski)", lat: 50.3436, lng: 18.2059 },
+            { code: "OKL", name: "Kluczbork (Powiat kluczborski)", lat: 50.44, lng: 17.6 },
+            { code: "OKR", name: "Krapkowice (Powiat krapkowicki)", lat: 50.89, lng: 17.63 },
+            { code: "ONA", name: "Namysłów (Powiat namysłowski)", lat: 50.57, lng: 17.97 },
+            { code: "ONY", name: "Nysa (Powiat nyski)", lat: 50.62, lng: 18.25 },
+            { code: "OOL", name: "Olesno (Powiat oleski)", lat: 50.4, lng: 18.08 },
+            { code: "OPO", name: "Opole (Powiat opolski)", lat: 50.6721, lng: 17.9253 },
+            { code: "OPR", name: "Prudnik (Powiat prudnicki)", lat: 50.82, lng: 17.85 },
+            { code: "OST", name: "Strzelce Opolskie (Powiat strzelecki)", lat: 50.19, lng: 17.88 },
+            { code: "PCH", name: "Chodzież (Powiat chodzieski)", lat: 52.9644, lng: 16.9189 },
+            { code: "PCT", name: "Czarnków (Powiat czarnkowsko-trzcianecki)", lat: 52.69, lng: 17.34 },
+            { code: "PGN", name: "Gniezno (Powiat gnieźnieński)", lat: 51.92, lng: 17.25 },
+            { code: "PGO", name: "Grodzisk Wielkopolski (Powiat grodziski)", lat: 52.63, lng: 16.44 },
+            { code: "PGS", name: "Gostyń (Powiat gostyński)", lat: 52.14, lng: 17.23 },
+            { code: "PJA", name: "Jarocin (Powiat jarociński)", lat: 51.9644, lng: 17.5 },
+            { code: "PKA", name: "Kalisz (Powiat kaliski)", lat: 52.54, lng: 17.01 },
+            { code: "PKE", name: "Kępno (Powiat kępiński)", lat: 52.39, lng: 17.09 },
+            { code: "PKL", name: "Koło (Powiat kolski)", lat: 51.99, lng: 16.97 },
+            { code: "PKN", name: "Konin (Powiat koniński)", lat: 52.15, lng: 17.05 },
+            { code: "PKR", name: "Krotoszyn (Powiat krotoszyński)", lat: 52.49, lng: 17.34 },
+            { code: "PKS", name: "Kościan (Powiat kościański)", lat: 52.01, lng: 17.07 },
+            { code: "PLE", name: "Leszno (Powiat leszczyński)", lat: 52.38, lng: 17.05 },
+            { code: "PMI", name: "Międzychód (Powiat międzychodzki)", lat: 52.44, lng: 16.49 },
+            { code: "PNT", name: "Nowy Tomyśl (Powiat nowotomyski)", lat: 52.29, lng: 16.98 },
+            { code: "POB", name: "Oborniki (Powiat obornicki)", lat: 52.4, lng: 16.43 },
+            { code: "POS", name: "Ostrów Wielkopolski (Powiat ostrowski)", lat: 51.94, lng: 17.4 },
+            { code: "POT", name: "Ostrzeszów (Powiat ostrzeszowski)", lat: 51.4286, lng: 17.9306 },
+            { code: "PPL", name: "Pleszew (Powiat pleszewski)", lat: 52.7, lng: 17.4 },
+            { code: "PRA", name: "Rawicz (Powiat rawicki)", lat: 52.52, lng: 16.87 },
+            { code: "PSE", name: "Śrem (Powiat śremski)", lat: 52.55, lng: 16.47 },
+            { code: "PSL", name: "Słupca (Powiat słupecki)", lat: 52.2883, lng: 21.4281 },
+            { code: "PSR", name: "Środa Wielkopolska (Powiat średzki)", lat: 52.62, lng: 17.28 },
+            { code: "PSZ", name: "Szamotuły (Powiat szamotulski)", lat: 52.87, lng: 16.58 },
+            { code: "PTU", name: "Turek (Powiat turecki)", lat: 52.86, lng: 16.78 },
+            { code: "PWA", name: "Wągrowiec (Powiat wągrowiecki)", lat: 52.39, lng: 16.53 },
+            { code: "PWL", name: "Wolsztyn (Powiat wolsztyński)", lat: 51.93, lng: 16.89 },
+            { code: "PWR", name: "Września (Powiat wrzesiński)", lat: 52.78, lng: 16.96 },
+            { code: "PZL", name: "Złotów (Powiat złotowski)", lat: 52.78, lng: 16.75 },
+            { code: "RBI", name: "Ustrzyki Dolne (Powiat bieszczadzki)", lat: 49.92, lng: 22.26 },
+            { code: "RBR", name: "Brzozów (Powiat brzozowski)", lat: 50.19, lng: 22.19 },
+            { code: "RDE", name: "Dębica (Powiat dębicki)", lat: 50.0492, lng: 21.4125 },
+            { code: "RJA", name: "Jarosław (Powiat jarosławski)", lat: 50.0169, lng: 22.6775 },
+            { code: "RJS", name: "Jasło (Powiat jasielski)", lat: 49.74, lng: 22.47 },
+            { code: "RKL", name: "Kolbuszowa (Powiat kolbuszowski)", lat: 50.22, lng: 22.01 },
+            { code: "RKR", name: "Krosno (Powiat krośnieński)", lat: 49.6931, lng: 21.7653 },
+            { code: "RLA", name: "Łańcut (Powiat łańcucki)", lat: 49.99, lng: 21.52 },
+            { code: "RLE", name: "Leżajsk (Powiat leżajski)", lat: 50.26, lng: 22.28 },
+            { code: "RLS", name: "Lesko (Powiat leski)", lat: 49.86, lng: 22.31 },
+            { code: "RLU", name: "Lubaczów (Powiat lubaczowski)", lat: 50.42, lng: 21.67 },
+            { code: "RMI", name: "Mielec (Powiat mielecki)", lat: 50.38, lng: 22.02 },
+            { code: "RNI", name: "Nisko (Powiat niżański)", lat: 49.54, lng: 21.55 },
+            { code: "RPR", name: "Przemyśl (Powiat przemyski)", lat: 49.91, lng: 21.94 },
+            { code: "RPZ", name: "Przeworsk (Powiat przeworski)", lat: 50.37, lng: 22.37 },
+            { code: "RRS", name: "Ropczyce (Powiat ropczycko-sędziszowski)", lat: 49.94, lng: 21.94 },
+            { code: "RSA", name: "Sanok (Powiat sanocki)", lat: 49.5597, lng: 22.2053 },
+            { code: "RSR", name: "Strzyżów (Powiat strzyżowski)", lat: 50.49, lng: 22.27 },
+            { code: "RST", name: "Stalowa Wola (Powiat stalowowolski)", lat: 50.39, lng: 22.1 },
+            { code: "RTA", name: "Tarnobrzeg (Powiat tarnobrzeski)", lat: 49.91, lng: 21.88 },
+            { code: "RZE", name: "Rzeszów (Powiat rzeszowski)", lat: 49.8, lng: 21.87 },
+            { code: "SBE", name: "Będzin (Powiat będziński)", lat: 50.36, lng: 19.4 },
+            { code: "SBI", name: "Bielsko-Biała (Powiat bielski)", lat: 49.8224, lng: 19.0469 },
+            { code: "SBL", name: "Bieruń (Powiat bieruńsko-lędziński)", lat: 50.1, lng: 18.57 },
+            { code: "SCI", name: "Cieszyn (Powiat cieszyński)", lat: 49.7478, lng: 18.6329 },
+            { code: "SCZ", name: "Częstochowa (Powiat częstochowski)", lat: 50.68, lng: 19.39 },
+            { code: "SGL", name: "Gliwice (Powiat gliwicki)", lat: 50.2945, lng: 18.6714 },
+            { code: "SKL", name: "Kłobuck (Powiat kłobucki)", lat: 50.25, lng: 18.93 },
+            { code: "SLU", name: "Lubliniec (Powiat lubliniecki)", lat: 50.38, lng: 18.69 },
+            { code: "SMI", name: "Mikołów (Powiat mikołowski)", lat: 50.35, lng: 18.54 },
+            { code: "SMY", name: "Myszków (Powiat myszkowski)", lat: 50.25, lng: 19.35 },
+            { code: "SPS", name: "Pszczyna (Powiat pszczyński)", lat: 50.19, lng: 19.07 },
+            { code: "SRB", name: "Rybnik (Powiat rybnicki)", lat: 49.94, lng: 19.48 },
+            { code: "SRC", name: "Racibórz (Powiat raciborski)", lat: 50.0914, lng: 18.2216 },
+            { code: "STA", name: "Tarnowskie Góry (Powiat tarnogórski)", lat: 50.48, lng: 19.41 },
+            { code: "SWD", name: "Wodzisław Śląski (Powiat wodzisławski)", lat: 50.51, lng: 18.69 },
+            { code: "SZA", name: "Zawiercie (Powiat zawierciański)", lat: 50.05, lng: 19.14 },
+            { code: "SZY", name: "Żywiec (Powiat żywiecki)", lat: 50.27, lng: 19.51 },
+            { code: "TBU", name: "Busko-Zdrój (Powiat buski)", lat: 50.9597, lng: 21.0786 },
+            { code: "TJE", name: "Jędrzejów (Powiat jędrzejowski)", lat: 51.06, lng: 20.17 },
+            { code: "TKA", name: "Kazimierza Wielka (Powiat kazimierski)", lat: 50.84, lng: 20.81 },
+            { code: "TKI", name: "Kielce (Powiat kielecki)", lat: 50.8661, lng: 20.6286 },
+            { code: "TKN", name: "Końskie (Powiat konecki)", lat: 50.47, lng: 20.4 },
+            { code: "TLW", name: "Włoszczowa (Powiat włoszczowski)", lat: 50.43, lng: 21.1 },
+            { code: "TOP", name: "Opatów (Powiat opatowski)", lat: 50.51, lng: 20.27 },
+            { code: "TOS", name: "Ostrowiec Świętokrzyski (Powiat ostrowiecki)", lat: 51.27, lng: 20.55 },
+            { code: "TPI", name: "Pińczów (Powiat pińczowski)", lat: 50.58, lng: 20.8 },
+            { code: "TSA", name: "Sandomierz (Powiat sandomierski)", lat: 50.91, lng: 20.15 },
+            { code: "TSK", name: "Skarżysko-Kamienna (Powiat skarżyski)", lat: 51.05, lng: 20.33 },
+            { code: "TST", name: "Starachowice (Powiat starachowicki)", lat: 51.04, lng: 20.38 },
+            { code: "TSZ", name: "Staszów (Powiat staszowski)", lat: 50.84, lng: 21.05 },
+            { code: "WBR", name: "Białobrzegi (Powiat białobrzeski)", lat: 52.16, lng: 20.57 },
+            { code: "WCI", name: "Ciechanów (Powiat ciechanowski)", lat: 52.8794, lng: 20.6231 },
+            { code: "WGM", name: "Grodzisk Mazowiecki (Powiat grodziski)", lat: 52.1039, lng: 20.6319 },
+            { code: "WGR", name: "Grójec (Powiat grójecki)", lat: 51.79, lng: 21.03 },
+            { code: "WGS", name: "Gostynin (Powiat gostyniński)", lat: 52.3, lng: 21.06 },
+            { code: "WKZ", name: "Kozienice (Powiat kozienicki)", lat: 52.6, lng: 21.43 },
+            { code: "WLI", name: "Lipsko (Powiat lipski)", lat: 52.49, lng: 21.48 },
+            { code: "WLS", name: "Łosice (Powiat łosicki)", lat: 52.56, lng: 21.37 },
+            { code: "WMA", name: "Maków Mazowiecki (Powiat makowski)", lat: 51.97, lng: 21.42 },
+            { code: "WML", name: "Mława (Powiat mławski)", lat: 52.65, lng: 21.16 },
+            { code: "WND", name: "Nowy Dwór Mazowiecki (Powiat nowodworski)", lat: 52.4344, lng: 20.7136 },
+            { code: "WOR", name: "Ostrów Mazowiecka (Powiat ostrowski)", lat: 52.08, lng: 21.36 },
+            { code: "WOS", name: "Ostrołęka (Powiat ostrołęcki)", lat: 52.16, lng: 20.7 },
+            { code: "WOT", name: "Otwock (Powiat otwocki)", lat: 52.1058, lng: 21.2747 },
+            { code: "WPI", name: "Piaseczno (Powiat piaseczyński)", lat: 52.45, lng: 20.78 },
+            { code: "WPL", name: "Płock (Powiat płocki)", lat: 52.18, lng: 21.39 },
+            { code: "WPN", name: "Płońsk (Powiat płoński)", lat: 52.54, lng: 20.84 },
+            { code: "WPR", name: "Pruszków (Powiat pruszkowski)", lat: 52.1691, lng: 20.8083 },
+            { code: "WPU", name: "Pułtusk (Powiat pułtuski)", lat: 52.7094, lng: 21.0853 },
+            { code: "WPY", name: "Przysucha (Powiat przysuski)", lat: 51.75, lng: 21.0 },
+            { code: "WPZ", name: "Przasnysz (Powiat przasnyski)", lat: 52.24, lng: 21.48 },
+            { code: "WRA", name: "Radom (Powiat radomski)", lat: 52.17, lng: 20.59 },
+            { code: "WSC", name: "Sochaczew (Powiat sochaczewski)", lat: 52.55, lng: 20.74 },
+            { code: "WSE", name: "Sierpc (Powiat sierpecki)", lat: 51.99, lng: 21.37 },
+            { code: "WSI", name: "Siedlce (Powiat siedlecki)", lat: 52.13, lng: 20.51 },
+            { code: "WSK", name: "Sokołów Podlaski (Powiat sokołowski)", lat: 52.51, lng: 20.77 },
+            { code: "WSZ", name: "Szydłowiec (Powiat szydłowiecki)", lat: 52.67, lng: 21.33 },
+            { code: "WWE", name: "Węgrów (Powiat węgrowski)", lat: 52.37, lng: 20.71 },
+            { code: "WWL", name: "Wołomin (Powiat wołomiński)", lat: 51.78, lng: 20.66 },
+            { code: "WWY", name: "Wyszków (Powiat wyszkowski)", lat: 51.84, lng: 21.43 },
+            { code: "WZ", name: "Ożarów Mazowiecki (Powiat warszawski zachodni)", lat: 51.77, lng: 21.36 },
+            { code: "WZU", name: "Żuromin (Powiat żuromiński)", lat: 53.0617, lng: 19.9044 },
+            { code: "WZW", name: "Zwoleń (Powiat zwoleński)", lat: 51.78, lng: 20.76 },
+            { code: "WZY", name: "Żyrardów (Powiat żyrardowski)", lat: 52.0592, lng: 20.4431 },
+            { code: "ZBI", name: "Białogard (Powiat białogardzki)", lat: 53.38, lng: 14.71 },
+            { code: "ZCH", name: "Choszczno (Powiat choszczeński)", lat: 53.17, lng: 14.93 },
+            { code: "ZDR", name: "Drawsko Pomorskie (Powiat drawski)", lat: 52.98, lng: 14.12 },
+            { code: "ZGL", name: "Goleniów (Powiat goleniowski)", lat: 53.43, lng: 14.09 },
+            { code: "ZGR", name: "Gryfino (Powiat gryfiński)", lat: 53.2506, lng: 14.4817 },
+            { code: "ZGY", name: "Gryfice (Powiat gryficki)", lat: 53.81, lng: 14.68 },
+            { code: "ZKA", name: "Kamień Pomorski (Powiat kamieński)", lat: 53.69, lng: 14.76 },
+            { code: "ZKL", name: "Kołobrzeg (Powiat kołobrzeski)", lat: 53.63, lng: 14.81 },
+            { code: "ZKO", name: "Koszalin (Powiat koszaliński)", lat: 53.58, lng: 14.28 },
+            { code: "ZLO", name: "Łobez (Powiat łobeski)", lat: 53.11, lng: 14.16 },
+            { code: "ZMY", name: "Myślibórz (Powiat myśliborski)", lat: 52.9239, lng: 14.8647 },
+            { code: "ZPL", name: "Police (Powiat policki)", lat: 53.55, lng: 14.51 },
+            { code: "ZPY", name: "Pyrzyce (Powiat pyrzycki)", lat: 53.46, lng: 14.72 },
+            { code: "ZSD", name: "Świdwin (Powiat świdwiński)", lat: 53.12, lng: 14.93 },
+            { code: "ZSL", name: "Sławno (Powiat sławieński)", lat: 54.3542, lng: 16.6744 },
+            { code: "ZST", name: "Stargard (Powiat stargardzki)", lat: 53.28, lng: 14.69 },
+            { code: "ZSZ", name: "Szczecinek (Powiat szczecinecki)", lat: 53.7097, lng: 16.7028 },
+            { code: "ZWA", name: "Wałcz (Powiat wałecki)", lat: 53.55, lng: 14.72 }
+        ];
+
+        let activePlatesData = easyPlatesData;
+        let selectedDifficulty = 'easy';
+        let currentRound = 1;
+        const totalRounds = 5;
+        let totalScore = 0;
+        let currentTarget = null;
+        let playerMarker = null;
+        let targetMarker = null;
+        let polyline = null;
+        let selectedLocation = null;
+        let usedPlates = [];
+        let startTime = 0;
+        let roundElapsedTime = 0;
+        let totalGameTime = 0;
+        let timerInterval = null;
+
+        
+        // --- AUDIO SYSTEM (Web Audio API, no external files) ---
+        let audioEnabled = true;
+        let audioCtx = null;
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+        function playTone(freq, duration, type='sine', volume=0.15, slideTo=null) {
+            if (!audioEnabled) return;
+            try {
+                const ctx = getAudioCtx();
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = type;
+                o.frequency.setValueAtTime(freq, ctx.currentTime);
+                if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + duration);
+                g.gain.setValueAtTime(volume, ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                o.connect(g); g.connect(ctx.destination);
+                o.start(); o.stop(ctx.currentTime + duration);
+            } catch(e){}
+        }
+        function playClick() { playTone(800, 0.08, 'sine', 0.12); }
+        function playHover() { playTone(600, 0.05, 'sine', 0.06); }
+        function playPop() { playTone(400, 0.12, 'sine', 0.18, 900); }
+        function playPlaceMarker() { playTone(700, 0.15, 'triangle', 0.14); setTimeout(()=>playTone(900,0.1,'sine',0.1),60); }
+        function playResult(distance) {
+            if (distance < 10) { // perfect
+                playTone(523,0.15,'sine',0.18); setTimeout(()=>playTone(659,0.15,'sine',0.18),120); setTimeout(()=>playTone(784,0.3,'sine',0.2),240);
+            } else if (distance < 50) {
+                playTone(500,0.2,'sine',0.15); setTimeout(()=>playTone(700,0.25,'sine',0.18),150);
+            } else if (distance < 150) {
+                playTone(400,0.25,'triangle',0.12);
+            } else {
+                playTone(200,0.35,'sawtooth',0.08);
+            }
+        }
+        function playGameOver() {
+            [261,329,392,523].forEach((f,i)=>setTimeout(()=>playTone(f,0.25,'sine',0.15), i*180));
+        }
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            document.getElementById('audio-toggle').innerText = audioEnabled ? '🔊' : '🔇';
+            if (audioEnabled) { getAudioCtx().resume(); playClick(); }
+        }
+        // unlock audio on first interaction
+        document.addEventListener('click', ()=>{ if(audioCtx) audioCtx.resume(); }, {once:true});
+        // --- DARK MODE - OSM DARK (filtr CSS) - 100% bez API ---
+        let darkMode = false;
+        let lightTiles = null;
+        function initTileLayers() {
+            lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
+        }
+        function applyDarkTiles() {
+            if (!map.hasLayer(lightTiles)) lightTiles.addTo(map);
+            document.getElementById('map').style.filter = darkMode ? 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' : '';
+        }
+
+        function toggleFeedback(){
+            playClick();
+            document.getElementById('feedback-panel').classList.toggle('open');
+        }
+
+        function toggleDarkMode() {
+            playClick();
+            darkMode = !darkMode;
+            document.body.classList.toggle('dark-mode', darkMode);
+            document.getElementById('dark-toggle').innerText = darkMode ? '☀️' : '🌙';
+            applyDarkTiles();
+            localStorage.setItem('plateguessr_darkmode', darkMode ? '1' : '0');
+        }
+
+
+        const map = L.map('map', { zoomControl: false }).setView([52.0693, 19.4803], 6);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+        initTileLayers();
+        applyDarkTiles();
+        if(localStorage.getItem('plateguessr_darkmode')==='1'){ darkMode=false; toggleDarkMode(); }
+
+        function getLeaderboard(mode) {
+            const saved = localStorage.getItem(`plateguessr_leaderboard_${mode}`);
+            return saved ? JSON.parse(saved) : [];
+        }
+        function updateLeaderboardsUI() {
+            const easyList = getLeaderboard('easy');
+            const easyListEl = document.getElementById('leaderboard-list-easy');
+            easyListEl.innerHTML = '';
+            easyList.forEach((entry, idx) => {
+                const li = document.createElement('li');
+                li.className = 'leaderboard-item';
+                li.innerHTML = `<span class="rank-name">${idx + 1}. ${entry.name}</span><span class="score-val">${entry.score} pkt (${entry.time}s)</span>`;
+                easyListEl.appendChild(li);
+            });
+            const hardList = getLeaderboard('hard');
+            const hardListEl = document.getElementById('leaderboard-list-hard');
+            hardListEl.innerHTML = '';
+            hardList.forEach((entry, idx) => {
+                const li = document.createElement('li');
+                li.className = 'leaderboard-item';
+                li.innerHTML = `<span class="rank-name">${idx + 1}. ${entry.name}</span><span class="score-val">${entry.score} pkt (${entry.time}s)</span>`;
+                hardListEl.appendChild(li);
+            });
+        }
+        map.on('click', function(e) {
+            if (document.getElementById('result-modal').style.display === 'block') return;
+            if (document.getElementById('start-screen').style.display !== 'none') return;
+            selectedLocation = e.latlng;
+            playPlaceMarker();
+            if (playerMarker) playerMarker.setLatLng(selectedLocation);
+            else playerMarker = L.marker(selectedLocation).addTo(map);
+            document.getElementById('guess-btn').disabled = false; // audio handled in placeMarker
+        });
+        function startTimer() {
+            startTime = Date.now();
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                roundElapsedTime = (Date.now() - startTime) / 1000;
+                document.getElementById('timer').innerText = (totalGameTime + roundElapsedTime).toFixed(1);
+            }, 100);
+        }
+        function stopTimer() { clearInterval(timerInterval); totalGameTime += roundElapsedTime; }
+        function showDifficultyMenu() { playClick(); document.getElementById('main-menu-actions').style.display = 'none'; document.getElementById('start-desc').style.display = 'none'; document.getElementById('difficulty-selection').style.display = 'flex'; }
+        function hideDifficultyMenu() { playClick(); document.getElementById('main-menu-actions').style.display = 'block'; document.getElementById('start-desc').style.display = 'block'; document.getElementById('difficulty-selection').style.display = 'none'; }
+        function startGame(difficulty) { playPop(); selectedDifficulty = difficulty; activePlatesData = (difficulty === 'hard') ? hardPlatesData : easyPlatesData; document.getElementById('start-screen').style.display = 'none'; startRound(); }
+        function startRound() {
+            if (playerMarker) map.removeLayer(playerMarker);
+            if (targetMarker) map.removeLayer(targetMarker);
+            if (polyline) map.removeLayer(polyline);
+            playerMarker = null; targetMarker = null; polyline = null; selectedLocation = null;
+            document.getElementById('guess-btn').disabled = true;
+            document.getElementById('result-modal').style.display = 'none';
+            document.getElementById('save-score-section').style.display = 'none';
+            document.getElementById('leaderboard-easy').style.display = 'none';
+            document.getElementById('leaderboard-hard').style.display = 'none';
+            let availablePlates = activePlatesData.filter(p => !usedPlates.includes(p.code));
+            if (availablePlates.length === 0) { usedPlates = []; availablePlates = [...activePlatesData]; }
+            currentTarget = availablePlates[Math.floor(Math.random() * availablePlates.length)];
+            usedPlates.push(currentTarget.code);
+            document.getElementById('plate-code').innerText = currentTarget.code + " " + generateRandomSuffix();
+            map.invalidateSize(); map.setView([52.0693, 19.4803], 6);
+            startTimer();
+        }
+        function generateRandomSuffix() {
+            const chars = "1234567890ABCDEFGHJKLMNPRSTUWVXYZ";
+            let res = "";
+            for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+            return res.substring(0, 2) + " " + res.substring(2);
+        }
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        function calculatePoints(distanceKm) { if (distanceKm < 3) return 5000; return Math.max(0, Math.round(5000 * Math.exp(-distanceKm / 80))); }
+        function makeGuess() {
+            if (!selectedLocation) return;
+            playPop();
+            stopTimer();
+            const targetLatLng = L.latLng(currentTarget.lat, currentTarget.lng);
+            const distance = calculateDistance(selectedLocation.lat, selectedLocation.lng, currentTarget.lat, currentTarget.lng);
+            const points = calculatePoints(distance);
+            totalScore += points;
+            targetMarker = L.marker(targetLatLng, { icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }) }).addTo(map);
+            polyline = L.polyline([selectedLocation, targetLatLng], { color: '#f97316', weight: 4, dashArray: '6, 8' }).addTo(map);
+            const bounds = L.latLngBounds([selectedLocation, targetLatLng]);
+            map.fitBounds(bounds, { padding: [60, 60] });
+            document.getElementById('result-location').innerText = `Lokalizacja: ${currentTarget.name} (${currentTarget.code})`;
+            document.getElementById('result-distance').innerText = `Pomyłka o: ${distance.toFixed(1)} km`;
+            playResult(distance);
+            document.getElementById('result-points').innerText = `+${points} pkt`;
+            document.getElementById('total-score').innerText = totalScore;
+            const nextBtn = document.getElementById('next-btn');
+            nextBtn.innerText = (currentRound === totalRounds) ? "GG" : "Następna runda";
+            document.getElementById('result-modal').style.display = 'block';
+            document.getElementById('guess-btn').disabled = true;
+        }
+        function handleModalAction() {
+            if (currentRound < totalRounds) { currentRound++; document.getElementById('round-num').innerText = currentRound; startRound(); }
+            else {
+                document.getElementById('result-title').innerText = "Koniec Gry!";
+                playGameOver();
+                document.getElementById('result-location').innerText = `Wynik końcowy: ${totalScore} / 25000 pkt (Czas: ${totalGameTime.toFixed(1)}s)`;
+                document.getElementById('result-distance').innerText = ""; document.getElementById('result-points').innerText = "";
+                document.getElementById('save-score-section').style.display = 'block';
+                if (selectedDifficulty === 'hard') document.getElementById('leaderboard-hard').style.display = 'block'; else document.getElementById('leaderboard-easy').style.display = 'block';
+                updateLeaderboardsUI();
+                const nextBtn = document.getElementById('next-btn'); nextBtn.innerText = "Zagraj ponownie"; nextBtn.onclick = resetGame;
+            }
+        }
+        function saveScore() {
+            const input = document.getElementById('player-name-input');
+            const name = input.value.trim() || "Anonim";
+            let leaderboard = getLeaderboard(selectedDifficulty);
+            leaderboard.push({ name: name, score: totalScore, time: totalGameTime.toFixed(1) });
+            leaderboard.sort((a, b) => { if (b.score !== a.score) return b.score - a.score; return parseFloat(a.time) - parseFloat(b.time); });
+            leaderboard = leaderboard.slice(0, 10);
+            localStorage.setItem(`plateguessr_leaderboard_${selectedDifficulty}`, JSON.stringify(leaderboard));
+            updateLeaderboardsUI();
+            document.getElementById('save-score-section').style.display = 'none';
+        }
+        document.querySelectorAll('.btn, .btn-mode').forEach(b=>{ b.addEventListener('mouseenter', playHover); b.addEventListener('click', ()=>{ if(!b.id.includes('guess')) playClick(); }); });
+        function resetGame() {
+            currentRound = 1; totalScore = 0; usedPlates = []; roundElapsedTime = 0; totalGameTime = 0;
+            document.getElementById('round-num').innerText = currentRound;
+            document.getElementById('total-score').innerText = totalScore;
+            document.getElementById('timer').innerText = "0.0";
+            document.getElementById('result-title').innerText = "Wynik rundy";
+            document.getElementById('player-name-input').value = "";
+            const nextBtn = document.getElementById('next-btn'); nextBtn.innerText = "Następna runda"; nextBtn.onclick = handleModalAction;
+            hideDifficultyMenu();
+            document.getElementById('start-screen').style.display = 'flex';
+        }
+    </script>
+</body>
+</html>
